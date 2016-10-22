@@ -8,6 +8,9 @@ namespace OpenTKTest
 {
     public class MainWindow : GameWindow
     {
+
+#region SHADER
+
         private const string VertexShader = @"
             #version 330
 
@@ -26,42 +29,36 @@ namespace OpenTKTest
 
         ";
 
-        private const string FragmentShader = @"
-    #version 330
-    #ifdef GL_ES
-        precision highp float;
-    #endif
+                private const string FragmentShader = @"
+            #version 330
+            #ifdef GL_ES
+                precision highp float;
+            #endif
 
-    out vec4 FragColor;
-    in vec4 Color;
+            out vec4 FragColor;
+            in vec4 Color;
 
-    void main()
-    {
-        FragColor = Color;
-    }";
+            void main()
+            {
+                FragColor = Color;
+            }";
 
-        private Matrix4 _worldMatrix = Matrix4.Identity;
+#endregion
+
+        // BUFFERS
         private uint _vbo;
         private uint _indexBo;
 
-        public MainWindow()
-        {
-        }
-
-        public MainWindow(int width, int height, GraphicsMode mode) : 
-            base(width, height, mode)
-        {
-
-        }
+        // VERTICES
         private readonly Vector3[] _vertices = new[]
-        {
+       {
              new Vector3(-0.8165f, -0.3333f, -0.4714f), // Vertex 0
             new Vector3(0.8165f, -0.3333f, -0.4714f),  // Vertex 1
             new Vector3(0, -0.3333f, 0.9428f),         // Vertex 2
             new Vector3(0, 1, 0),                      // Vertex 3
         };
 
-        private readonly int[] _indices = 
+        private readonly int[] _indices =
             {
                0, 2, 1,  // Triangle 0 "Bottom" facing towards negative y axis
             0, 1, 3,  // Triangle 1 "Back side" facing towards negative z axis
@@ -70,9 +67,36 @@ namespace OpenTKTest
         };
 
 
+        // SHADER
         private int _shaderProgramm;
-        private int _worldMatrixLocation;
+        private int _worldMatrixLocation; // Matrixposition in Shader
+        
 
+        // INPUT
+        private static bool _mouseDown;
+        private float _alpha;
+        
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        public MainWindow()
+        {
+        }
+
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        public MainWindow(int width, int height, GraphicsMode mode) : 
+            base(width, height, mode)
+        {
+
+        }
+
+
+        /// <summary>
+        /// This method is called on load event.
+        /// </summary>
         internal void OnLoad()
         {
             // setup settings, load textures, sounds
@@ -85,10 +109,54 @@ namespace OpenTKTest
             GetAllActiveUniforms();
 
            GL.ClearColor(0.1f, 0.1f, 0.1f, 0.1f);
-
-
-            _worldMatrixLocation = GetAndMapShaderValues("gWorld");
+            
+           _worldMatrixLocation = GetAndMapShaderValues("gWorld");
+            M.WorldMatrix *= Matrix4.CreateScale(0.5f);
         }
+
+        #region GAMELOOP & RENDER
+        
+        /// <summary>
+        /// OnUpdateFrame
+        /// Add game logic, input handling, etc. here
+        /// </summary>
+        internal void OnUpdateFrame()
+        {
+            if (Keyboard[Key.Escape])
+            {
+                Exit();
+            }
+
+
+            // Input region
+            MouseDown += MouseDownWithButtonDown;
+            MouseMove += MouseMoveWithButtonDown;
+
+            MouseUp += (sender, args) =>
+            {
+                _mouseDown = false;
+            };
+
+        }
+
+
+        /// <summary>
+        //  OnRenderFrame
+        /// </summary>
+        internal void OnRenderFrame()
+        {
+            // render graphics
+            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+
+            // Set WorldMatrix
+            var worldMatrix = M.WorldMatrix;
+            GL.UniformMatrix4(_worldMatrixLocation, true, ref worldMatrix);
+
+            Present();
+        }
+
+        #endregion
+
 
         private void GetAllActiveUniforms()
         {
@@ -173,53 +241,10 @@ namespace OpenTKTest
             GL.UseProgram(_shaderProgramm);
 
         }
-
+        
         internal void OnResize()
         {
             GL.Viewport(0, 0, Width, Height);
-        }
-
-        internal void OnUpdateFrame()
-        {
-            // add game logic, input handling
-            if (Keyboard[Key.Escape])
-            {
-                Exit();
-            }
-            if (Keyboard[Key.W])
-            {
-                _worldMatrix *= Matrix4.CreateRotationX(0.1f);
-            }
-            if (Keyboard[Key.S])
-            {
-                _worldMatrix *= Matrix4.CreateRotationY(0.1f);
-            }
-            if (Keyboard[Key.D])
-            {
-                _worldMatrix *= Matrix4.CreateRotationZ(0.1f);
-            }
-
-        }
-
-
-
-
-        internal void OnRenderFrame()
-        {
-            RenderWithAShader();
-        }
-
-
-
-        private void RenderWithAShader()
-        {
-            // render graphics
-            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-
-            // Set WorldMatrix
-            GL.UniformMatrix4(_worldMatrixLocation, false, ref _worldMatrix);
-
-            Present();
         }
 
         private void Present()
@@ -249,5 +274,23 @@ namespace OpenTKTest
 
             SwapBuffers();
         }
+
+        #region INPUT
+
+        private void MouseMoveWithButtonDown(object sender, MouseMoveEventArgs e)
+        {
+            if (!_mouseDown) return;
+            _alpha -= e.XDelta * 0.000000001f;
+            M.WorldMatrix *= Matrix4.CreateRotationY(_alpha);
+
+        }
+
+        private void MouseDownWithButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _mouseDown = true;
+
+        }
+
+        #endregion
     }
 }

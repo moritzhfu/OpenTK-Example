@@ -13,7 +13,7 @@ namespace OpenTKTest
                 {
                    game.OnLoad();
                 };
-
+                
                 game.Resize += (sender, e) =>
                 {
                     game.OnResize();
