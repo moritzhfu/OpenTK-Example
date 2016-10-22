@@ -15,16 +15,16 @@ namespace OpenTKTest
             #version 330
 
             layout (location = 0) in vec3 Position;
+            layout (location = 1) in vec2 TexCoord;
 
             uniform mat4 MVP;
             
-            out vec4 Color;
-
+            out vec2 TexCoord0;
 
             void main() 
             {
-                Color = vec4(Position, 1.0);
                 gl_Position = MVP * vec4(Position, 1.0);
+                TexCoord0 = TexCoord;
              }
 
         ";
@@ -34,13 +34,14 @@ namespace OpenTKTest
             #ifdef GL_ES
                 precision highp float;
             #endif
-
+            in vec2 TexCoord0;
             out vec4 FragColor;
-            in vec4 Color;
+
+            uniform sampler2D gSampler;
 
             void main()
             {
-                FragColor = Color;
+                FragColor = texture2D(gSampler, TexCoord0.st);
             }";
 
 #endregion
@@ -48,66 +49,46 @@ namespace OpenTKTest
         // BUFFERS
         private uint _vbo;
         private uint _indexBo;
-
+#region Vertices
         // VERTICES
-        private readonly Vector3[] _vertices = new[]
+        public struct Vertex
         {
-                     // left, down, front vertex
-                    new Vector3(-1, -1, -1), // 0  - belongs to left
-                    new Vector3(-1, -1, -1), // 1  - belongs to down
-                    new Vector3(-1, -1, -1), // 2  - belongs to front
+            public Vector3 Vertices;
+            public Vector2 Uv;
+        }
 
-                    // left, down, back vertex
-                    new Vector3(-1, -1,  1),  // 3  - belongs to left
-                    new Vector3(-1, -1,  1),  // 4  - belongs to down
-                    new Vector3(-1, -1,  1),  // 5  - belongs to back
-
-                    // left, up, front vertex
-                    new Vector3(-1,  1, -1),  // 6  - belongs to left
-                    new Vector3(-1,  1, -1),  // 7  - belongs to up
-                    new Vector3(-1,  1, -1),  // 8  - belongs to front
-
-                    // left, up, back vertex
-                    new Vector3(-1,  1,  1),  // 9  - belongs to left
-                    new Vector3(-1,  1,  1),  // 10 - belongs to up
-                    new Vector3(-1,  1,  1),  // 11 - belongs to back
-
-                    // right, down, front vertex
-                    new Vector3( 1, -1, -1), // 12 - belongs to right
-                    new Vector3( 1, -1, -1), // 13 - belongs to down
-                    new Vector3( 1, -1, -1), // 14 - belongs to front
-
-                    // right, down, back vertex
-                    new Vector3( 1, -1,  1),  // 15 - belongs to right
-                    new Vector3( 1, -1,  1),  // 16 - belongs to down
-                    new Vector3( 1, -1,  1),  // 17 - belongs to back
-
-                    // right, up, front vertex
-                    new Vector3( 1,  1, -1),  // 18 - belongs to right
-                    new Vector3( 1,  1, -1),  // 19 - belongs to up
-                    new Vector3( 1,  1, -1),  // 20 - belongs to front
-
-                    // right, up, back vertex
-                    new Vector3( 1,  1,  1),  // 21 - belongs to right
-                    new Vector3( 1,  1,  1),  // 22 - belongs to up
-                    new Vector3( 1,  1,  1),  // 23 - belongs to back
-
+        private readonly Vertex[] _vertex = {
+            new Vertex {
+                Vertices = new Vector3(-1.0f, -1.0f, 0.5773f),
+                Uv = new Vector2(0.0f, 0.0f)
+            },
+             new Vertex {
+                Vertices = new Vector3(0.0f, -1.0f, -1.15475f),
+                Uv = new Vector2(0.5f, 0.0f)
+            },
+              new Vertex {
+                Vertices = new Vector3(1.0f, -1.0f, 0.5773f),
+                Uv = new Vector2(1.0f, 0.0f)
+            },
+               new Vertex {
+                Vertices = new Vector3(0.0f, 1.0f, 0.0f),
+                Uv = new Vector2(0.5f, 1.0f)
+            },
         };
 
         private readonly int[] _indices =
             {
-                     0,  6,  3,     3,  6,  9, // left
-                   2, 14, 20,     2, 20,  8, // front
-                  12, 15, 18,    15, 21, 18, // right
-                   5, 11, 17,    17, 11, 23, // back
-                   7, 22, 10,     7, 19, 22, // top
-                   1,  4, 16,     1, 16, 13, // bottom 
+                  0, 3, 1,
+                               1, 3, 2,
+                               2, 3, 0,
+                               0, 1, 2
         };
-
+#endregion
 
         // SHADER
         private int _shaderProgramm;
         private int _xform; // Matrixposition in Shader
+        private int _gSamplerPosition;
 
         // Window
         public static int WindowWidth;
@@ -125,6 +106,9 @@ namespace OpenTKTest
         private readonly Camera _camera = new Camera();
         private Vector2 _centerMousePos;
 
+        // TEXTURE
+        TextureTarget _textureTarget;
+        private Texture _texture;
         /// <summary>
         /// Constructor
         /// </summary>
@@ -163,9 +147,17 @@ namespace OpenTKTest
            GL.ClearColor(0.1f, 0.1f, 0.1f, 0.1f);
             
            _xform = GetAndMapShaderValues("MVP");
-          
+           
             WindowWidth = Width;
             WindowHeight = Height;
+
+
+            _textureTarget = TextureTarget.Texture2D;
+            // Get Texture
+            _texture = new Texture(_textureTarget, "Leaves.jpg");
+            _texture.Load();
+            // Get Textureposition in Shader
+            _gSamplerPosition = GetAndMapShaderValues("gSampler");
         }
 
         #region GAMELOOP & RENDER
@@ -229,11 +221,14 @@ namespace OpenTKTest
             // note: all calculations are the other way round due to row notation
             var aspectRatio = Width / (float)Height;
             ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
-            ModelMatrix4 = CalculateModelMatrix(0.5f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
+            ModelMatrix4 = CalculateModelMatrix(2f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
             ViewMatrix4 = CalculateViewMatrix();
             var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
             GL.UniformMatrix4(_xform, false, ref worldMatrix);
 
+            // Set texture
+            GL.Uniform1(_gSamplerPosition, 0);
+        
             Present();
         }
 
@@ -341,7 +336,7 @@ namespace OpenTKTest
             // ArrayBuffer means the buffer will contain an array of verticies
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
             // After gen and bind we will fill the buffer with data now
-            GL.BufferData(BufferTarget.ArrayBuffer, (IntPtr) (_vertices.Length*sizeof(Vector3)), _vertices,
+            GL.BufferData(BufferTarget.ArrayBuffer, (IntPtr) (_vertex.Length * sizeof(Vector3) * sizeof(Vector2)), _vertex,
                 BufferUsageHint.StaticDraw);
             // Bind index/indices data
             GL.GenBuffers(1, out _indexBo);
@@ -402,15 +397,41 @@ namespace OpenTKTest
 
         private void Present()
         {
+            /*
+
+
+
+            
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)12);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+    pTexture->Bind(GL_TEXTURE0);
+    glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
+
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+
+            */
+
             // Enable Vertex Attribute data due to fixed pipeline when no shader is installed
             GL.EnableVertexAttribArray(0);
+            GL.EnableVertexAttribArray(1);
             // Bind Buffer again, we are doing the draw call
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
             // This will tell the pipeline how to interpet the data coming in from the buffer
             // index == 0, size = 3 since Vector3 is used. Not normalized. 
             // stride is number of bytes between instances.
             // Struct with position and normals would be 6 *4 = 24 e.g.
-            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, 0);
+            unsafe
+            {
+                GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), IntPtr.Zero);
+                GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), 12);
+            }
+
+
 
             // Bind index buffer
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, _indexBo);
@@ -419,12 +440,15 @@ namespace OpenTKTest
             // Do the draw call.
             // First param is where to begin drawing, second how long
             GL.DrawArrays(PrimitiveType.Triangles, 0, 3);*/
+            
+            // Bind Texture
+            _texture.Bind(TextureUnit.Texture0);
 
-            GL.DrawElements(PrimitiveType.Triangles, 36, DrawElementsType.UnsignedInt, IntPtr.Zero);
+            GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, IntPtr.Zero);
 
             // cleanup
             GL.DisableVertexAttribArray(0);
-
+            GL.DisableVertexAttribArray(1);
             SwapBuffers();
         }
 
