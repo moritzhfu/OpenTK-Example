@@ -109,11 +109,6 @@ namespace OpenTKTest
         private int _shaderProgramm;
         private int _xform; // Matrixposition in Shader
 
-
-        // INPUT
-        private static bool _mouseDown;
-        private float _alpha;
-        
         // Window
         public static int WindowWidth;
         public static int WindowHeight;
@@ -128,6 +123,7 @@ namespace OpenTKTest
 
         // CAMERA
         private readonly Camera _camera = new Camera();
+        private Vector2 _centerMousePos;
 
         /// <summary>
         /// Constructor
@@ -168,8 +164,6 @@ namespace OpenTKTest
             
            _xform = GetAndMapShaderValues("MVP");
           
-
-
             WindowWidth = Width;
             WindowHeight = Height;
         }
@@ -182,6 +176,7 @@ namespace OpenTKTest
         /// </summary>
         internal void OnUpdateFrame()
         {
+            // Input region
             if (Keyboard[Key.Escape])
             {
                 Exit();
@@ -210,15 +205,14 @@ namespace OpenTKTest
             {
                 MoveCamera(0f, 0f, -0.1f);
             }
-
-            // Input region
-            MouseDown += MouseDownWithButtonDown;
-            MouseMove += MouseMoveWithButtonDown;
-
-            MouseUp += (sender, args) =>
+            
+            if (Focused)
             {
-                _mouseDown = false;
-            };
+                var delta = _centerMousePos - new Vector2(OpenTK.Input.Mouse.GetState().X, OpenTK.Input.Mouse.GetState().Y);
+
+                AddRotation(delta.X, delta.Y);
+                ResetCursor();
+            }
 
         }
 
@@ -235,7 +229,7 @@ namespace OpenTKTest
             // note: all calculations are the other way round due to row notation
             var aspectRatio = Width / (float)Height;
             ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
-            ModelMatrix4 = CalculateModelMatrix(0.5f, new Vector3(0, _alpha, 0), new Vector3(0f, 0f, -3.0f));
+            ModelMatrix4 = CalculateModelMatrix(0.5f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
             ViewMatrix4 = CalculateViewMatrix();
             var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
             GL.UniformMatrix4(_xform, false, ref worldMatrix);
@@ -294,6 +288,23 @@ namespace OpenTKTest
             _camera.Orientation.Y = Math.Max(Math.Min(_camera.Orientation.Y + y, (float)Math.PI / 2.0f - 0.1f), (float)-Math.PI / 2.0f + 0.1f);
         }
 
+
+        void ResetCursor()
+        {
+            OpenTK.Input.Mouse.SetPosition(Bounds.Left + Bounds.Width / 2, Bounds.Top + Bounds.Height / 2);
+            _centerMousePos = new Vector2(OpenTK.Input.Mouse.GetState().X, OpenTK.Input.Mouse.GetState().Y);
+        }
+
+        // Centers mouse in the window
+        protected override void OnFocusedChanged(EventArgs e)
+        {
+            base.OnFocusedChanged(e);
+
+            if (Focused)
+            {
+                ResetCursor();
+            }
+        }
         #endregion
 
 
@@ -417,22 +428,6 @@ namespace OpenTKTest
             SwapBuffers();
         }
 
-        #region INPUT
-
-        private void MouseMoveWithButtonDown(object sender, MouseMoveEventArgs e)
-        {
-            if (!_mouseDown) return;
-            _alpha -= e.XDelta * 0.001f;
-
-        }
-
-        private void MouseDownWithButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _mouseDown = true;
-
-        }
-
-        #endregion
     }
 
     internal class Camera
