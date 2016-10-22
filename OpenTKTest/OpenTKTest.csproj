@@ -49,6 +49,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FirstPersonCamera.cs" />
     <Compile Include="Input.cs" />
     <Compile Include="M.cs" />
     <Compile Include="MainWindow.cs" />

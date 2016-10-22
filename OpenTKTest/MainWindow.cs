@@ -16,15 +16,15 @@ namespace OpenTKTest
 
             layout (location = 0) in vec3 Position;
 
-            uniform mat4 gWorld;
-
+            uniform mat4 MVP;
+            
             out vec4 Color;
 
 
             void main() 
             {
-                Color = vec4(clamp(Position, 0.0, 1.0), 1.0);
-                gl_Position = gWorld * vec4(Position.x, Position.y, Position.z, 1.0);
+                Color = vec4(Position, 1.0);
+                gl_Position = MVP * vec4(Position, 1.0);
              }
 
         ";
@@ -51,31 +51,84 @@ namespace OpenTKTest
 
         // VERTICES
         private readonly Vector3[] _vertices = new[]
-       {
-             new Vector3(-0.8165f, -0.3333f, -0.4714f), // Vertex 0
-            new Vector3(0.8165f, -0.3333f, -0.4714f),  // Vertex 1
-            new Vector3(0, -0.3333f, 0.9428f),         // Vertex 2
-            new Vector3(0, 1, 0),                      // Vertex 3
+        {
+                     // left, down, front vertex
+                    new Vector3(-1, -1, -1), // 0  - belongs to left
+                    new Vector3(-1, -1, -1), // 1  - belongs to down
+                    new Vector3(-1, -1, -1), // 2  - belongs to front
+
+                    // left, down, back vertex
+                    new Vector3(-1, -1,  1),  // 3  - belongs to left
+                    new Vector3(-1, -1,  1),  // 4  - belongs to down
+                    new Vector3(-1, -1,  1),  // 5  - belongs to back
+
+                    // left, up, front vertex
+                    new Vector3(-1,  1, -1),  // 6  - belongs to left
+                    new Vector3(-1,  1, -1),  // 7  - belongs to up
+                    new Vector3(-1,  1, -1),  // 8  - belongs to front
+
+                    // left, up, back vertex
+                    new Vector3(-1,  1,  1),  // 9  - belongs to left
+                    new Vector3(-1,  1,  1),  // 10 - belongs to up
+                    new Vector3(-1,  1,  1),  // 11 - belongs to back
+
+                    // right, down, front vertex
+                    new Vector3( 1, -1, -1), // 12 - belongs to right
+                    new Vector3( 1, -1, -1), // 13 - belongs to down
+                    new Vector3( 1, -1, -1), // 14 - belongs to front
+
+                    // right, down, back vertex
+                    new Vector3( 1, -1,  1),  // 15 - belongs to right
+                    new Vector3( 1, -1,  1),  // 16 - belongs to down
+                    new Vector3( 1, -1,  1),  // 17 - belongs to back
+
+                    // right, up, front vertex
+                    new Vector3( 1,  1, -1),  // 18 - belongs to right
+                    new Vector3( 1,  1, -1),  // 19 - belongs to up
+                    new Vector3( 1,  1, -1),  // 20 - belongs to front
+
+                    // right, up, back vertex
+                    new Vector3( 1,  1,  1),  // 21 - belongs to right
+                    new Vector3( 1,  1,  1),  // 22 - belongs to up
+                    new Vector3( 1,  1,  1),  // 23 - belongs to back
+
         };
 
         private readonly int[] _indices =
             {
-               0, 2, 1,  // Triangle 0 "Bottom" facing towards negative y axis
-            0, 1, 3,  // Triangle 1 "Back side" facing towards negative z axis
-            1, 2, 3,  // Triangle 2 "Right side" facing towards positive x axis
-            2, 0, 3,  // Triangle 3 "Left side" facing towrads negative x axis
+                     0,  6,  3,     3,  6,  9, // left
+                   2, 14, 20,     2, 20,  8, // front
+                  12, 15, 18,    15, 21, 18, // right
+                   5, 11, 17,    17, 11, 23, // back
+                   7, 22, 10,     7, 19, 22, // top
+                   1,  4, 16,     1, 16, 13, // bottom 
         };
 
 
         // SHADER
         private int _shaderProgramm;
-        private int _worldMatrixLocation; // Matrixposition in Shader
-        
+        private int _xform; // Matrixposition in Shader
+
 
         // INPUT
         private static bool _mouseDown;
         private float _alpha;
         
+        // Window
+        public static int WindowWidth;
+        public static int WindowHeight;
+
+        // MATRIX
+
+        public Matrix4 WorldMatrix { set; get; } = Matrix4.Identity;
+
+        public Matrix4 ProjectionMatrix4 { set; get; }
+        public Matrix4 ModelMatrix4 { set; get; }
+        public Matrix4 ViewMatrix4 { set; get; }
+
+        // CAMERA
+        private readonly Camera _camera = new Camera();
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -90,7 +143,6 @@ namespace OpenTKTest
         public MainWindow(int width, int height, GraphicsMode mode) : 
             base(width, height, mode)
         {
-
         }
 
 
@@ -102,16 +154,24 @@ namespace OpenTKTest
             // setup settings, load textures, sounds
             VSync = VSyncMode.On;
 
+            GL.FrontFace(FrontFaceDirection.Cw);
+            GL.CullFace(CullFaceMode.Back);
+            GL.Enable(EnableCap.CullFace);
+
             // Create VertexBuffer
-           CreateVertexBuffer();
+            CreateVertexBuffer();
            CreateAndLinkShaders();
             // DEBUG:
             GetAllActiveUniforms();
 
            GL.ClearColor(0.1f, 0.1f, 0.1f, 0.1f);
             
-           _worldMatrixLocation = GetAndMapShaderValues("gWorld");
-            M.WorldMatrix *= Matrix4.CreateScale(0.5f);
+           _xform = GetAndMapShaderValues("MVP");
+          
+
+
+            WindowWidth = Width;
+            WindowHeight = Height;
         }
 
         #region GAMELOOP & RENDER
@@ -126,7 +186,30 @@ namespace OpenTKTest
             {
                 Exit();
             }
-
+            if (Keyboard[Key.W])
+            {
+                MoveCamera(0f, 0.1f, 0f);
+            }
+            if (Keyboard[Key.A])
+            {
+                MoveCamera(-0.1f, 0f, 0f);
+            }
+            if (Keyboard[Key.S])
+            {
+                MoveCamera(0f, -0.1f, 0f);
+            }
+            if (Keyboard[Key.D])
+            {
+                MoveCamera(0.1f, 0f, 0f);
+            }
+            if (Keyboard[Key.Q])
+            {
+                MoveCamera(0f, 0f, 0.1f);
+            }
+            if (Keyboard[Key.E])
+            {
+                MoveCamera(0f, 0f, -0.1f);
+            }
 
             // Input region
             MouseDown += MouseDownWithButtonDown;
@@ -148,11 +231,67 @@ namespace OpenTKTest
             // render graphics
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            // Set WorldMatrix
-            var worldMatrix = M.WorldMatrix;
-            GL.UniformMatrix4(_worldMatrixLocation, true, ref worldMatrix);
+            // Set MVP with CameraMovement
+            // note: all calculations are the other way round due to row notation
+            var aspectRatio = Width / (float)Height;
+            ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
+            ModelMatrix4 = CalculateModelMatrix(0.5f, new Vector3(0, _alpha, 0), new Vector3(0f, 0f, -3.0f));
+            ViewMatrix4 = CalculateViewMatrix();
+            var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
+            GL.UniformMatrix4(_xform, false, ref worldMatrix);
 
             Present();
+        }
+
+
+        #endregion
+
+        #region MATRIXDEF
+
+
+        public Matrix4 CalculateModelMatrix(float scale, Vector3 rotation, Vector3 position)
+        {
+            return Matrix4.CreateScale(scale) * Matrix4.CreateRotationX(rotation.X) * Matrix4.CreateRotationY(rotation.Y) * Matrix4.CreateRotationZ(rotation.Z) * Matrix4.CreateTranslation(position);
+        }
+
+        public Matrix4 CalculateViewMatrix()
+        {
+            var lookat = new Vector3
+            {
+                X = (float)(Math.Sin(_camera.Orientation.X) * Math.Cos(_camera.Orientation.Y)),
+                Y = (float)(Math.Sin(_camera.Orientation.Y)),
+                Z = (float)(Math.Cos(_camera.Orientation.X) * Math.Cos(_camera.Orientation.Y))
+            };
+
+            return Matrix4.LookAt(_camera.Position, _camera.Position + lookat, Vector3.UnitY);
+        }
+        #endregion
+
+        #region CAMERAMethods
+        public void MoveCamera(float x, float y, float z)
+        {
+            var offset = new Vector3();
+
+            var forward = new Vector3((float)Math.Sin(_camera.Orientation.X), 0, (float)Math.Cos(_camera.Orientation.X));
+            var right = new Vector3(-forward.Z, 0, forward.X);
+
+            offset += x * right;
+            offset += y * forward;
+            offset.Y += z;
+
+            offset.NormalizeFast();
+            offset = Vector3.Multiply(offset, _camera.MoveSpeed);
+
+            _camera.Position += offset;
+        }
+
+        public void AddRotation(float x, float y)
+        {
+            x = x * _camera.MouseSensitivity;
+            y = y * _camera.MouseSensitivity;
+
+            _camera.Orientation.X = (_camera.Orientation.X + x) % ((float)Math.PI * 2.0f);
+            _camera.Orientation.Y = Math.Max(Math.Min(_camera.Orientation.Y + y, (float)Math.PI / 2.0f - 0.1f), (float)-Math.PI / 2.0f + 0.1f);
         }
 
         #endregion
@@ -244,7 +383,10 @@ namespace OpenTKTest
         
         internal void OnResize()
         {
+            var aspectRatio = Width / (float)Height;
+            ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
             GL.Viewport(0, 0, Width, Height);
+          
         }
 
         private void Present()
@@ -254,7 +396,7 @@ namespace OpenTKTest
             // Bind Buffer again, we are doing the draw call
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
             // This will tell the pipeline how to interpet the data coming in from the buffer
-            // index == 0, size = 3 since float3 is used. Not normalized. 
+            // index == 0, size = 3 since Vector3 is used. Not normalized. 
             // stride is number of bytes between instances.
             // Struct with position and normals would be 6 *4 = 24 e.g.
             GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, 0);
@@ -267,7 +409,7 @@ namespace OpenTKTest
             // First param is where to begin drawing, second how long
             GL.DrawArrays(PrimitiveType.Triangles, 0, 3);*/
 
-            GL.DrawElements(PrimitiveType.Triangles, 12, DrawElementsType.UnsignedInt, 0);
+            GL.DrawElements(PrimitiveType.Triangles, 36, DrawElementsType.UnsignedInt, IntPtr.Zero);
 
             // cleanup
             GL.DisableVertexAttribArray(0);
@@ -280,8 +422,7 @@ namespace OpenTKTest
         private void MouseMoveWithButtonDown(object sender, MouseMoveEventArgs e)
         {
             if (!_mouseDown) return;
-            _alpha -= e.XDelta * 0.000000001f;
-            M.WorldMatrix *= Matrix4.CreateRotationY(_alpha);
+            _alpha -= e.XDelta * 0.001f;
 
         }
 
@@ -292,5 +433,13 @@ namespace OpenTKTest
         }
 
         #endregion
+    }
+
+    internal class Camera
+    {
+        public Vector3 Orientation = new Vector3((float)Math.PI, 0f, 0f);
+        public Vector3 Position = Vector3.Zero;
+        public float MoveSpeed = 0.2f;
+        public float MouseSensitivity = 0.01f;
     }
 }
