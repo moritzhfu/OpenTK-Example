@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using OpenTK;
 using OpenTK.Graphics;
 using OpenTK.Graphics.OpenGL;
@@ -14,17 +16,21 @@ namespace OpenTKTest
         private const string VertexShader = @"
             #version 330
 
-            layout (location = 0) in vec3 Position;
-            layout (location = 1) in vec2 TexCoord;
+          layout (location = 0) in vec3 Position;
+          layout (location = 1) in vec2 TexCoord;
+          layout (location = 2) in vec3 Normal;
 
-            uniform mat4 MVP;
-            
-            out vec2 TexCoord0;           
-         
+          uniform mat4 MVP;
+          uniform mat4 M;           
+
+          out vec2 TexCoord0;           
+          out vec3 Normal0;
+
             void main() 
             {
                 gl_Position = MVP * vec4(Position, 1.0);
                 TexCoord0 = TexCoord;
+                Normal0 = (M * vec4(Normal, 0.0)).xyz;
              }
 
         ";
@@ -35,6 +41,8 @@ namespace OpenTKTest
                 precision highp float;
             #endif
             in vec2 TexCoord0;
+            in vec3 Normal0;
+            
             out vec4 FragColor;
 
             uniform sampler2D gSampler;
@@ -42,17 +50,29 @@ namespace OpenTKTest
             // Directional Light
             struct DirectionalLight
             {
-   	            vec3 Color;
-   	            float AmbientIntensity;
+   	             vec3 Color;
+                 float AmbientIntensity;
+                 vec3 Direction;
+                 float DiffuseIntensity;
             };
 
             uniform DirectionalLight gDirectionalLight;
 
             void main()
             {
-                FragColor = texture2D(gSampler, TexCoord0.st)*
-   	   	   	               vec4(gDirectionalLight.Color, 1.0f) *
-   	   	   	               gDirectionalLight.AmbientIntensity;
+                vec4 AmbientColor = vec4(gDirectionalLight.Color * gDirectionalLight.AmbientIntensity, 1.0f);
+                float DiffuseFactor = dot(normalize(Normal0), -gDirectionalLight.Direction);
+
+                 vec4 DiffuseColor;
+
+                if (DiffuseFactor > 0) {
+                    DiffuseColor = vec4(gDirectionalLight.Color * gDirectionalLight.DiffuseIntensity * DiffuseFactor, 1.0f);
+                }
+                else {
+                    DiffuseColor = vec4(0, 0, 0, 0);
+                }
+
+                 FragColor = texture2D(gSampler, TexCoord0.xy) * (AmbientColor + DiffuseColor);
             }";
 
 #endregion
@@ -66,24 +86,29 @@ namespace OpenTKTest
         {
             public Vector3 Vertices;
             public Vector2 Uv;
+            public Vector3 Normal;
         }
 
-        private readonly Vertex[] _vertex = {
+        private Vertex[] _vertex = {
             new Vertex {
                 Vertices = new Vector3(-1.0f, -1.0f, 0.5773f),
-                Uv = new Vector2(0.0f, 0.0f)
+                Uv = new Vector2(0.0f, 0.0f),
+                Normal = Vector3.Zero
             },
              new Vertex {
                 Vertices = new Vector3(0.0f, -1.0f, -1.15475f),
-                Uv = new Vector2(0.5f, 0.0f)
+                Uv = new Vector2(0.5f, 0.0f),
+                Normal = Vector3.Zero
             },
               new Vertex {
                 Vertices = new Vector3(1.0f, -1.0f, 0.5773f),
-                Uv = new Vector2(1.0f, 0.0f)
+                Uv = new Vector2(1.0f, 0.0f),
+                Normal = Vector3.Zero
             },
                new Vertex {
                 Vertices = new Vector3(0.0f, 1.0f, 0.0f),
-                Uv = new Vector2(0.5f, 1.0f)
+                Uv = new Vector2(0.5f, 1.0f),
+                Normal = Vector3.Zero
             },
         };
 
@@ -99,6 +124,7 @@ namespace OpenTKTest
         // SHADER
         private int _shaderProgramm;
         private int _xform; // Matrixposition in Shader
+        private int _modelMatrixPosition; // Matrixposition in Shader
         private int _gSamplerPosition;
 
         // Window
@@ -122,8 +148,27 @@ namespace OpenTKTest
         private Texture _texture;
 
         // Lightning
-        private int _gDirectionalLightColor;
-        private int _gDirectionalAmbientIntensity;
+        private int _directionalLightColor;
+        private int _directionalAmbientIntensity;
+        private int _directionalDirection;
+        private int _directionalIntensity;
+
+        private struct Light
+        {
+
+            public Vector3 Color;
+            public float AmbientIntensity;
+            public Vector3 Direction;
+            public float DiffuseIntensity;
+        }
+
+        private Light _light = new Light
+        {
+            Color = Vector3.One,
+            AmbientIntensity = -0.9f,
+            Direction = Vector3.UnitX,
+            DiffuseIntensity = 2f
+        };
 
         /// <summary>
         /// Constructor
@@ -155,6 +200,9 @@ namespace OpenTKTest
             GL.CullFace(CullFaceMode.Back);
             GL.Enable(EnableCap.CullFace);
 
+            // Create normals
+            CreateNormals(_indices, ref _vertex);
+
             // Create VertexBuffer
             CreateVertexBuffer();
             CreateAndLinkShaders();
@@ -164,7 +212,7 @@ namespace OpenTKTest
            GL.ClearColor(0.1f, 0.1f, 0.1f, 0.1f);
             
            _xform = GetAndMapShaderValues("MVP");
-           
+           _modelMatrixPosition = GetAndMapShaderValues("M");
             WindowWidth = Width;
             WindowHeight = Height;
 
@@ -179,8 +227,10 @@ namespace OpenTKTest
 
 
             // Get Lightposition in Shader
-            _gDirectionalLightColor = GetAndMapShaderValues("gDirectionalLight.Color");
-            _gDirectionalAmbientIntensity = GetAndMapShaderValues("gDirectionalLight.AmbientIntensity");
+            _directionalLightColor = GetAndMapShaderValues("gDirectionalLight.Color");
+            _directionalAmbientIntensity = GetAndMapShaderValues("gDirectionalLight.AmbientIntensity");
+            _directionalDirection = GetAndMapShaderValues("gDirectionalLight.Direction");
+            _directionalIntensity = GetAndMapShaderValues("gDirectionalLight.DiffuseIntensity");
 
         }
 
@@ -221,7 +271,27 @@ namespace OpenTKTest
             {
                 MoveCamera(0f, 0f, -0.1f);
             }
-            
+            if (Keyboard[Key.Up])
+            {
+                _light.Direction += new Vector3(0f,0.1f,0f);
+                _light.Direction.Y.Clamp(0.0f, 1.0f);
+            }
+            if (Keyboard[Key.Down])
+            {
+                _light.Direction -= new Vector3(0f, 0.1f, 0f);
+                _light.Direction.Y.Clamp(0.0f, 1.0f);
+            }
+            if (Keyboard[Key.Left])
+            {
+                _light.Direction -= new Vector3(0.1f, 0f, 0f);
+                _light.Direction.X.Clamp(0.0f, 1.0f);
+            }
+            if (Keyboard[Key.Right])
+            {
+                _light.Direction += new Vector3(0.1f, 0f, 0f);
+                _light.Direction.X.Clamp(0.0f, 1.0f);
+            }
+
             if (Focused)
             {
                 var delta = _centerMousePos - new Vector2(OpenTK.Input.Mouse.GetState().X, OpenTK.Input.Mouse.GetState().Y);
@@ -248,19 +318,31 @@ namespace OpenTKTest
             ModelMatrix4 = CalculateModelMatrix(2f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
             ViewMatrix4 = CalculateViewMatrix();
             var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
+            // Set MVP Matrix
             GL.UniformMatrix4(_xform, false, ref worldMatrix);
-
+            // Set M Matrix
+            var modelMatrix4 = ModelMatrix4;
+            GL.UniformMatrix4(_modelMatrixPosition, false, ref modelMatrix4);
             // Set texture
             GL.Uniform1(_gSamplerPosition, 0);
 
+
             // Set Directional Lightning
-            GL.Uniform3(_gDirectionalLightColor, new Vector3(0.3f,0.3f,0.6f));
-            GL.Uniform1(_gDirectionalAmbientIntensity, 1f);
+            SetLight();
 
             Present();
         }
 
-
+        private void SetLight()
+        {
+            GL.Uniform3(_directionalLightColor, _light.Color);
+            GL.Uniform1(_directionalAmbientIntensity, _light.AmbientIntensity);
+            var direction = _light.Direction;
+            direction.Normalize();
+            GL.Uniform3(_directionalDirection, direction);
+            GL.Uniform1(_directionalIntensity, _light.DiffuseIntensity);
+        }
+       
         #endregion
 
         #region MATRIXDEF
@@ -329,6 +411,42 @@ namespace OpenTKTest
             }
         }
         #endregion
+
+        /// <summary>
+        /// This function takes an array of vertices and indices, fetches the vertices of each triangle according to the indices and calculates its normal.
+        /// In the first loop we only accumulate the normals into each of the three triangle vertices.
+        /// For each triangle the normal is calculated as a cross product between the two edges that are coming out of the first vertex.
+        ///  Before accumulating the normal in the vertex we make sure we normalize it.
+        /// The reaons is that the result of the cross product is not guaranteed to be of unit length.
+        /// In the second loop we scan the array of vertices directly (since we don't care about the indices any more) and normalize the normal of each vertex.
+        /// This operation is equivalent to averaging out the accumulated sum of normals and leaves us with a vertex normal that is of a unit length. 
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <param name="vertex"></param>
+        private static void CreateNormals(IReadOnlyList<int> indices, ref Vertex[] vertex)
+        {
+            for (var i = 0; i < indices.Count; i += 3)
+            {
+                var index0 = indices[i];
+                var index1 = indices[i + 1];
+                var index2 = indices[i + 2];
+                var v1 = vertex[index1].Vertices - vertex[index0].Vertices;
+                var v2 = vertex[index2].Vertices - vertex[index0].Vertices;
+                Vector3 normal;
+                Vector3.Cross(ref v1, ref v2, out normal);
+                normal.Normalize();
+
+               vertex[index0].Normal += normal;
+               vertex[index1].Normal += normal;
+               vertex[index2].Normal += normal;
+            }
+
+            for (var j = 0; j < vertex.Length; j++)
+            {
+                vertex[j].Normal.Normalize();
+            }
+            
+        }
 
 
         private void GetAllActiveUniforms()
@@ -426,8 +544,10 @@ namespace OpenTKTest
         private void Present()
         {
             // Enable Vertex Attribute data due to fixed pipeline when no shader is installed
-            GL.EnableVertexAttribArray(0);
-            GL.EnableVertexAttribArray(1);
+            GL.EnableVertexAttribArray(0); // vertex
+            GL.EnableVertexAttribArray(1); // uv
+            GL.EnableVertexAttribArray(2); // normal
+
             // Bind Buffer again, we are doing the draw call
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
             // This will tell the pipeline how to interpet the data coming in from the buffer
@@ -440,6 +560,8 @@ namespace OpenTKTest
                 GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), IntPtr.Zero);
                 // This is the uv map data
                 GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), 12);
+                // This is the normal data
+                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), 20);
             }
             
             // Bind index buffer
@@ -449,7 +571,7 @@ namespace OpenTKTest
             // Do the draw call.
             // First param is where to begin drawing, second how long
             GL.DrawArrays(PrimitiveType.Triangles, 0, 3);*/
-            
+
             // Bind Texture
             _texture.Bind(TextureUnit.Texture0);
 
@@ -458,6 +580,7 @@ namespace OpenTKTest
             // cleanup
             GL.DisableVertexAttribArray(0);
             GL.DisableVertexAttribArray(1);
+            GL.DisableVertexAttribArray(2);
             SwapBuffers();
         }
 
