@@ -480,7 +480,8 @@ namespace OpenTKTest
             // ArrayBuffer means the buffer will contain an array of verticies
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
             // After gen and bind we will fill the buffer with data now
-            GL.BufferData(BufferTarget.ArrayBuffer, (IntPtr) (_vertex.Length * sizeof(Vector3) * sizeof(Vector2)), _vertex,
+            // Size = Vertexelements * vec3 Vertex * vec2 Uv * vec3 normal 
+            GL.BufferData(BufferTarget.ArrayBuffer, (IntPtr) (_vertex.Length * sizeof(Vector3) * sizeof(Vector2) * sizeof(Vector3)), _vertex,
                 BufferUsageHint.StaticDraw);
             // Bind index/indices data
             GL.GenBuffers(1, out _indexBo);
