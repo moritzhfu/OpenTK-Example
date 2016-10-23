@@ -19,8 +19,8 @@ namespace OpenTKTest
 
             uniform mat4 MVP;
             
-            out vec2 TexCoord0;
-
+            out vec2 TexCoord0;           
+         
             void main() 
             {
                 gl_Position = MVP * vec4(Position, 1.0);
@@ -39,9 +39,20 @@ namespace OpenTKTest
 
             uniform sampler2D gSampler;
 
+            // Directional Light
+            struct DirectionalLight
+            {
+   	            vec3 Color;
+   	            float AmbientIntensity;
+            };
+
+            uniform DirectionalLight gDirectionalLight;
+
             void main()
             {
-                FragColor = texture2D(gSampler, TexCoord0.st);
+                FragColor = texture2D(gSampler, TexCoord0.st)*
+   	   	   	               vec4(gDirectionalLight.Color, 1.0f) *
+   	   	   	               gDirectionalLight.AmbientIntensity;
             }";
 
 #endregion
@@ -79,10 +90,10 @@ namespace OpenTKTest
         private readonly int[] _indices =
             {
                   0, 3, 1,
-                               1, 3, 2,
-                               2, 3, 0,
-                               0, 1, 2
-        };
+                  1, 3, 2,
+                  2, 3, 0,
+                  0, 1, 2
+            };
 #endregion
 
         // SHADER
@@ -107,8 +118,13 @@ namespace OpenTKTest
         private Vector2 _centerMousePos;
 
         // TEXTURE
-        TextureTarget _textureTarget;
+        private TextureTarget _textureTarget;
         private Texture _texture;
+
+        // Lightning
+        private int _gDirectionalLightColor;
+        private int _gDirectionalAmbientIntensity;
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -134,13 +150,14 @@ namespace OpenTKTest
             // setup settings, load textures, sounds
             VSync = VSyncMode.On;
 
-            GL.FrontFace(FrontFaceDirection.Cw);
+            // FrontFace is counter clockwise
+            GL.FrontFace(FrontFaceDirection.Ccw);
             GL.CullFace(CullFaceMode.Back);
             GL.Enable(EnableCap.CullFace);
 
             // Create VertexBuffer
             CreateVertexBuffer();
-           CreateAndLinkShaders();
+            CreateAndLinkShaders();
             // DEBUG:
             GetAllActiveUniforms();
 
@@ -154,14 +171,21 @@ namespace OpenTKTest
 
             _textureTarget = TextureTarget.Texture2D;
             // Get Texture
-            _texture = new Texture(_textureTarget, "Leaves.jpg");
-            _texture.Load();
+            _texture = new Texture(_textureTarget, "test.png");
+            if(!_texture.Load())
+                throw new Exception("Texture file not found!");
             // Get Textureposition in Shader
             _gSamplerPosition = GetAndMapShaderValues("gSampler");
+
+
+            // Get Lightposition in Shader
+            _gDirectionalLightColor = GetAndMapShaderValues("gDirectionalLight.Color");
+            _gDirectionalAmbientIntensity = GetAndMapShaderValues("gDirectionalLight.AmbientIntensity");
+
         }
 
         #region GAMELOOP & RENDER
-        
+
         /// <summary>
         /// OnUpdateFrame
         /// Add game logic, input handling, etc. here
@@ -228,7 +252,11 @@ namespace OpenTKTest
 
             // Set texture
             GL.Uniform1(_gSamplerPosition, 0);
-        
+
+            // Set Directional Lightning
+            GL.Uniform3(_gDirectionalLightColor, new Vector3(0.3f,0.3f,0.6f));
+            GL.Uniform1(_gDirectionalAmbientIntensity, 1f);
+
             Present();
         }
 
@@ -284,7 +312,7 @@ namespace OpenTKTest
         }
 
 
-        void ResetCursor()
+        private void ResetCursor()
         {
             OpenTK.Input.Mouse.SetPosition(Bounds.Left + Bounds.Width / 2, Bounds.Top + Bounds.Height / 2);
             _centerMousePos = new Vector2(OpenTK.Input.Mouse.GetState().X, OpenTK.Input.Mouse.GetState().Y);
@@ -397,25 +425,6 @@ namespace OpenTKTest
 
         private void Present()
         {
-            /*
-
-
-
-            
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)12);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
-    pTexture->Bind(GL_TEXTURE0);
-    glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
-
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
-
-            */
-
             // Enable Vertex Attribute data due to fixed pipeline when no shader is installed
             GL.EnableVertexAttribArray(0);
             GL.EnableVertexAttribArray(1);
@@ -427,12 +436,12 @@ namespace OpenTKTest
             // Struct with position and normals would be 6 *4 = 24 e.g.
             unsafe
             {
+                // This is the vertex data
                 GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), IntPtr.Zero);
+                // This is the uv map data
                 GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), 12);
             }
-
-
-
+            
             // Bind index buffer
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, _indexBo);
 

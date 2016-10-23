@@ -1,20 +1,14 @@
 ﻿using System;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using OpenTK.Graphics.OpenGL;
+using PixelFormat = OpenTK.Graphics.OpenGL.PixelFormat;
 
 namespace OpenTKTest
 {
     public class Texture
     {
-        private struct TextureImage
-        {
-            public byte[] ImageByteData;
-            public int Width;
-            public int Height;
-        }
-
-        private TextureImage _textureImage;
         private int _textureObject;
         private readonly string _filename;
         private readonly TextureTarget _textureTarget;
@@ -29,26 +23,26 @@ namespace OpenTKTest
             {
                 try
                 {
-                    var retrivedImage = Image.FromFile(Environment.CurrentDirectory + "\\" + _filename);
+                var bitmap = new Bitmap(Environment.CurrentDirectory + "\\" + _filename);
+               
+                GL.Hint(HintTarget.PerspectiveCorrectionHint, HintMode.Nicest);
 
-                     _textureImage = new TextureImage
-                        {
-                            ImageByteData = retrivedImage.ImageToByteArray(),
-                            Height = retrivedImage.Height,
-                            Width = retrivedImage.Width
-                        };
-
-
+                var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                    ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                
                 _textureObject = GL.GenTexture();
                 GL.BindTexture(_textureTarget, _textureObject);
-                GL.TexImage2D(_textureTarget, 0, PixelInternalFormat.Rgba16f, _textureImage.Width, _textureImage.Height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, _textureImage.ImageByteData);
+
+                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, data.Width, data.Height, 0,
+                  PixelFormat.Bgra, PixelType.UnsignedByte, data.Scan0);
+                bitmap.UnlockBits(data);
 
                 GL.TexParameter(_textureTarget, TextureParameterName.TextureMinFilter, (float) TextureMinFilter.Linear);
                 GL.TexParameter(_textureTarget, TextureParameterName.TextureMagFilter, (float)TextureMinFilter.Linear);
                 GL.BindTexture(_textureTarget, 0);
 
             }
-            catch (FileNotFoundException e)
+            catch (FileNotFoundException)
                 {
                     return false;
                 }
@@ -56,7 +50,8 @@ namespace OpenTKTest
                 return true;
             }
 
-            public void Bind(TextureUnit unit)
+
+        public void Bind(TextureUnit unit)
             {
                 GL.ActiveTexture(unit);
                 GL.BindTexture(_textureTarget, _textureObject);
