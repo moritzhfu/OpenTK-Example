@@ -283,13 +283,11 @@ namespace OpenTKTest
             }
             if (Keyboard[Key.Left])
             {
-                _light.Direction -= new Vector3(0.1f, 0f, 0f);
-                _light.Direction.X.Clamp(0.0f, 1.0f);
+                _light.DiffuseIntensity -= 0.1f;
             }
             if (Keyboard[Key.Right])
             {
-                _light.Direction += new Vector3(0.1f, 0f, 0f);
-                _light.Direction.X.Clamp(0.0f, 1.0f);
+                _light.DiffuseIntensity += 0.1f;
             }
 
             if (Focused)

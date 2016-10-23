@@ -11,3 +11,4 @@ A quick and dirty OpenTK example following loosely this OpenGL tutorial: http://
 - Set & get uniform variables
 - Model, view, projection matrices
 - Moving camera (WASD, E,Q for up and down, mouselook)
+- Diffuse Light (move it with Up,Down; change intensity with Left,Right)
