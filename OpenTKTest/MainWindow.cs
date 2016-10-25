@@ -558,9 +558,9 @@ namespace OpenTKTest
                 // This is the vertex data
                 GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), IntPtr.Zero);
                 // This is the uv map data
-                GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), 12);
+                GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 12);
                 // This is the normal data
-                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), 20);
+                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 20);
             }
             
             // Bind index buffer
@@ -580,6 +580,7 @@ namespace OpenTKTest
             GL.DisableVertexAttribArray(0);
             GL.DisableVertexAttribArray(1);
             GL.DisableVertexAttribArray(2);
+
             SwapBuffers();
         }
 
