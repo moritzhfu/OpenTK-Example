@@ -16,9 +16,10 @@ namespace OpenTKTest
             public Vector3 Normal;
         }
 
-        private List<Texture> _textures = new List<Texture>();
+        private readonly List<Texture> _textures = new List<Texture>();
+        private readonly List<int> _materialTextureIndex = new List<int>();
 
-              
+
         private readonly List<Tuple<Vertex[], int[]>> _completeScene = new List<Tuple<Vertex[], int[]>>();
         private readonly List<Tuple<uint, uint>> _bufferList = new List<Tuple<uint, uint>>();
 
@@ -51,7 +52,7 @@ namespace OpenTKTest
                     PostProcessSteps.Triangulate | PostProcessSteps.GenerateSmoothNormals | PostProcessSteps.FlipUVs |
                     PostProcessSteps.JoinIdenticalVertices);
 
-            InitMaterials(scene);
+                InitMaterials(scene);
 
                 // for every mesh
                 var allMeshesInScene = scene.Meshes;
@@ -65,6 +66,8 @@ namespace OpenTKTest
 
         private void InitMesh(Assimp.Mesh mesh)
         {
+              _materialTextureIndex.Add(mesh.MaterialIndex);
+
               var vertices = new Vertex[mesh.Vertices.Count];
               var indices = new int[mesh.FaceCount * 3];
 
@@ -92,11 +95,11 @@ namespace OpenTKTest
 
             var count = 0;
 
-            for (var i = 0; i < faces.Count; i++)
+            foreach (var face in faces)
             {
-                indices[count] = faces[i].Indices[0];
-                indices[++count] = faces[i].Indices[1];
-                indices[++count] = faces[i].Indices[2];
+                indices[count] = face.Indices[0];
+                indices[++count] = face.Indices[1];
+                indices[++count] = face.Indices[2];
                 ++count;
             }
              
@@ -126,53 +129,19 @@ namespace OpenTKTest
                     if (material.GetMaterialTexture(TextureType.Diffuse, 0, out foundTexture))
                     {
                         _textures.Add(new Texture(TextureTarget.Texture2D, foundTexture.FilePath));
-                        if(!_textures[i].Load())
+                        if (!_textures[i].Load())
                         {
                             Console.WriteLine("Error Loading texture!");
                         }
                     }
                 }
-            }
-        }
-
-        /*
-         * 
-         *  // Initialize the materials
-    for (unsigned int i = 0 ; i < pScene->mNumMaterials ; i++) {
-        const aiMaterial* pMaterial = pScene->mMaterials[i];
-
-        m_Textures[i] = NULL;
-
-        if (pMaterial->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
-            aiString Path;
-
-            if (pMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &Path, NULL, NULL, NULL, NULL, NULL) == AI_SUCCESS) {
-                std::string FullPath = Dir + "/" + Path.data;
-                m_Textures[i] = new Texture(GL_TEXTURE_2D, FullPath.c_str());
-
-                if (!m_Textures[i]->Load()) {
-                    printf("Error loading texture '%s'\n", FullPath.c_str());
-                    delete m_Textures[i];
-                    m_Textures[i] = NULL;
-                    Ret = false;
-                }
-                else {
-                    printf("Loaded texture '%s'\n", FullPath.c_str());
+                else
+                {
+                   _textures.Add(new Texture(TextureTarget.Texture2D, "white.png"));
+                   _textures[i].Load();
+                  }
                 }
             }
-        }
-
-        // Load a white texture in case the model does not include its own texture
-        if (!m_Textures[i]) {
-            m_Textures[i] = new Texture(GL_TEXTURE_2D, "../Content/white.png");
-
-            Ret = m_Textures[i]->Load();
-        }
-    }
-
-    return Ret;
-         * 
-         * */
 
         public unsafe void Render()
         {
@@ -187,11 +156,15 @@ namespace OpenTKTest
                 var indicesCount = _completeScene[i].Item2.Length;
 
                 GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBuffer);
-                GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, (sizeof(Vertex)), IntPtr.Zero);
+                GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), IntPtr.Zero);
                 GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 12);
-                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr)20);
+                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 20);
                 
                 GL.BindBuffer(BufferTarget.ElementArrayBuffer, indexBuffer);
+
+                _textures[_materialTextureIndex[i]].Bind(TextureUnit.Texture0);
+               
+
 
                 GL.DrawElements(BeginMode.Triangles, indicesCount, DrawElementsType.UnsignedInt ,0);
             }

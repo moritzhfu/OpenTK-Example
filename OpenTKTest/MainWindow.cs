@@ -72,7 +72,7 @@ namespace OpenTKTest
                     DiffuseColor = vec4(0, 0, 0, 0);
                 }
 
-                 FragColor = vec4(1.0,0.0,0.0,1.0);
+                 FragColor = texture2D(gSampler, TexCoord0.xy);
             }";
 
 #endregion
@@ -80,46 +80,6 @@ namespace OpenTKTest
         // BUFFERS
         private uint _vbo;
         private uint _indexBo;
-#region Vertices
-        // VERTICES
-        public struct Vertex
-        {
-            public Vector3 Vertices;
-            public Vector2 Uv;
-            public Vector3 Normal;
-        }
-
-        private Vertex[] _vertex = {
-            new Vertex {
-                Vertices = new Vector3(-1.0f, -1.0f, 0.5773f),
-                Uv = new Vector2(0.0f, 0.0f),
-                Normal = Vector3.Zero
-            },
-             new Vertex {
-                Vertices = new Vector3(0.0f, -1.0f, -1.15475f),
-                Uv = new Vector2(0.5f, 0.0f),
-                Normal = Vector3.Zero
-            },
-              new Vertex {
-                Vertices = new Vector3(1.0f, -1.0f, 0.5773f),
-                Uv = new Vector2(1.0f, 0.0f),
-                Normal = Vector3.Zero
-            },
-               new Vertex {
-                Vertices = new Vector3(0.0f, 1.0f, 0.0f),
-                Uv = new Vector2(0.5f, 1.0f),
-                Normal = Vector3.Zero
-            },
-        };
-
-        private readonly int[] _indices =
-            {
-                  0, 3, 1,
-                  1, 3, 2,
-                  2, 3, 0,
-                  0, 1, 2
-            };
-#endregion
 
         // SHADER
         private int _shaderProgramm;
@@ -143,10 +103,7 @@ namespace OpenTKTest
         private readonly Camera _camera = new Camera();
         private Vector2 _centerMousePos;
 
-        // TEXTURE
-        private TextureTarget _textureTarget;
-        private Texture _texture;
-
+       
         // Lightning
         private int _directionalLightColor;
         private int _directionalAmbientIntensity;
@@ -199,12 +156,11 @@ namespace OpenTKTest
             GL.FrontFace(FrontFaceDirection.Ccw);
             GL.CullFace(CullFaceMode.Back);
             GL.Enable(EnableCap.CullFace);
+            GL.Enable(EnableCap.DepthTest);
+           
 
-            // Create normals
-            CreateNormals(_indices, ref _vertex);
 
-            // Create VertexBuffer
-            //CreateVertexBuffer();
+            // Create and link shader
             CreateAndLinkShaders();
             // DEBUG:
             GetAllActiveUniforms();
@@ -216,12 +172,6 @@ namespace OpenTKTest
             WindowWidth = Width;
             WindowHeight = Height;
 
-
-            _textureTarget = TextureTarget.Texture2D;
-            // Get Texture
-            _texture = new Texture(_textureTarget, "test.jpg");
-            if(!_texture.Load())
-                throw new Exception("Texture file not found!");
             // Get Textureposition in Shader
             _gSamplerPosition = GetAndMapShaderValues("gSampler");
 
@@ -428,7 +378,7 @@ namespace OpenTKTest
         /// </summary>
         /// <param name="indices"></param>
         /// <param name="vertex"></param>
-        private static void CreateNormals(IReadOnlyList<int> indices, ref Vertex[] vertex)
+        private static void CreateNormals(IReadOnlyList<int> indices, ref Mesh.Vertex[] vertex)
         {
             for (var i = 0; i < indices.Count; i += 3)
             {
@@ -479,26 +429,7 @@ namespace OpenTKTest
         }
 
 
-        private unsafe void CreateVertexBuffer()
-        {
-            // Create one (1) Buffer and pass _vbo as our vertex buffer handle 
-            GL.GenBuffers(1, out _vbo);
-            // Bind the buffer as kind of "generic" buffer
-            // ArrayBuffer means the buffer will contain an array of verticies
-            GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
-            // After gen and bind we will fill the buffer with data now
-            // Size = Vertexelements * vec3 Vertex * vec2 Uv * vec3 normal 
-            GL.BufferData(BufferTarget.ArrayBuffer, (IntPtr) (_vertex.Length * sizeof(Vector3) * sizeof(Vector2) * sizeof(Vector3)), _vertex,
-                BufferUsageHint.StaticDraw);
-            // Bind index/indices data
-            GL.GenBuffers(1, out _indexBo);
-            GL.BindBuffer(BufferTarget.ElementArrayBuffer, _indexBo);
-            // Fill with data
-            GL.BufferData(BufferTarget.ElementArrayBuffer, (IntPtr) (_indices.Length*sizeof(int)), _indices,
-                BufferUsageHint.StaticDraw);
-        }
-
-        private void CreateAndLinkShaders()
+    private void CreateAndLinkShaders()
         {
             _shaderProgramm = GL.CreateProgram();
             var fragShader = GL.CreateShader(ShaderType.FragmentShader);
@@ -546,51 +477,6 @@ namespace OpenTKTest
             GL.Viewport(0, 0, Width, Height);
           
         }
-
-        private void Present()
-        {
-            // Enable Vertex Attribute data due to fixed pipeline when no shader is installed
-            GL.EnableVertexAttribArray(0); // vertex
-            GL.EnableVertexAttribArray(1); // uv
-            GL.EnableVertexAttribArray(2); // normal
-
-            // Bind Buffer again, we are doing the draw call
-            GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
-            // This will tell the pipeline how to interpet the data coming in from the buffer
-            // index == 0, size = 3 since Vector3 is used. Not normalized. 
-            // stride is number of bytes between instances.
-            // Struct with position and normals would be 6 *4 = 24 e.g.
-            unsafe
-            {
-                // This is the vertex data
-                GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), IntPtr.Zero);
-                // This is the uv map data
-                GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 12);
-                // This is the normal data
-                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 20);
-            }
-            
-            // Bind index buffer
-            GL.BindBuffer(BufferTarget.ElementArrayBuffer, _indexBo);
-
-            /* This method is no longer supported/needed with ElementArrayBuffer
-            // Do the draw call.
-            // First param is where to begin drawing, second how long
-            GL.DrawArrays(PrimitiveType.Triangles, 0, 3);*/
-
-            // Bind Texture
-            _texture.Bind(TextureUnit.Texture0);
-
-            GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, IntPtr.Zero);
-
-            // cleanup
-            GL.DisableVertexAttribArray(0);
-            GL.DisableVertexAttribArray(1);
-            GL.DisableVertexAttribArray(2);
-
-            SwapBuffers();
-        }
-
     }
 
     internal class Camera
