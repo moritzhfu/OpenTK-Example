@@ -72,7 +72,7 @@ namespace OpenTKTest
                     DiffuseColor = vec4(0, 0, 0, 0);
                 }
 
-                 FragColor = texture2D(gSampler, TexCoord0.xy) * (AmbientColor + DiffuseColor);
+                 FragColor = vec4(1.0,0.0,0.0,1.0);
             }";
 
 #endregion
@@ -204,7 +204,7 @@ namespace OpenTKTest
             CreateNormals(_indices, ref _vertex);
 
             // Create VertexBuffer
-            CreateVertexBuffer();
+            //CreateVertexBuffer();
             CreateAndLinkShaders();
             // DEBUG:
             GetAllActiveUniforms();
@@ -219,7 +219,7 @@ namespace OpenTKTest
 
             _textureTarget = TextureTarget.Texture2D;
             // Get Texture
-            _texture = new Texture(_textureTarget, "test.png");
+            _texture = new Texture(_textureTarget, "test.jpg");
             if(!_texture.Load())
                 throw new Exception("Texture file not found!");
             // Get Textureposition in Shader
@@ -232,7 +232,11 @@ namespace OpenTKTest
             _directionalDirection = GetAndMapShaderValues("gDirectionalLight.Direction");
             _directionalIntensity = GetAndMapShaderValues("gDirectionalLight.DiffuseIntensity");
 
+            _scene = new Mesh();
+            _scene.LoadMesh("phoenix_ugv.md2");
         }
+
+        private Mesh _scene;
 
         #region GAMELOOP & RENDER
 
@@ -313,7 +317,7 @@ namespace OpenTKTest
             // note: all calculations are the other way round due to row notation
             var aspectRatio = Width / (float)Height;
             ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
-            ModelMatrix4 = CalculateModelMatrix(2f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
+            ModelMatrix4 = CalculateModelMatrix(0.05f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
             ViewMatrix4 = CalculateViewMatrix();
             var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
             // Set MVP Matrix
@@ -328,7 +332,10 @@ namespace OpenTKTest
             // Set Directional Lightning
             SetLight();
 
-            Present();
+            _scene.Render();
+
+            //Present();
+            SwapBuffers();
         }
 
         private void SetLight()
