@@ -165,7 +165,6 @@ namespace OpenTKTest
                 _textures[_materialTextureIndex[i]].Bind(TextureUnit.Texture0);
                
 
-
                 GL.DrawElements(BeginMode.Triangles, indicesCount, DrawElementsType.UnsignedInt ,0);
             }
 

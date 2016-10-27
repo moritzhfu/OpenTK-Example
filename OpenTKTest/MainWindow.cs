@@ -72,7 +72,7 @@ namespace OpenTKTest
                     DiffuseColor = vec4(0, 0, 0, 0);
                 }
 
-                 FragColor = texture2D(gSampler, TexCoord0.xy);
+                 FragColor = texture2D(gSampler, TexCoord0.xy) + (DiffuseColor*AmbientColor);
             }";
 
 #endregion
@@ -92,7 +92,6 @@ namespace OpenTKTest
         public static int WindowHeight;
 
         // MATRIX
-
         public Matrix4 WorldMatrix { set; get; } = Matrix4.Identity;
 
         public Matrix4 ProjectionMatrix4 { set; get; }
@@ -127,6 +126,10 @@ namespace OpenTKTest
             DiffuseIntensity = 2f
         };
 
+
+        // ShadowMap
+        private ShadowMapFBO _shadowMapFbo = new ShadowMapFBO();
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -158,7 +161,9 @@ namespace OpenTKTest
             GL.Enable(EnableCap.CullFace);
             GL.Enable(EnableCap.DepthTest);
            
-
+            // Create ShadowMap
+            // TODO: FIX Exception!
+            //_shadowMapFbo.Init(WindowWidth, WindowHeight);
 
             // Create and link shader
             CreateAndLinkShaders();
@@ -167,8 +172,8 @@ namespace OpenTKTest
 
            GL.ClearColor(0.1f, 0.1f, 0.1f, 0.1f);
             
-           _xform = GetAndMapShaderValues("MVP");
-           _modelMatrixPosition = GetAndMapShaderValues("M");
+            _xform = GetAndMapShaderValues("MVP");
+            _modelMatrixPosition = GetAndMapShaderValues("M");
             WindowWidth = Width;
             WindowHeight = Height;
 
@@ -184,9 +189,13 @@ namespace OpenTKTest
 
             _scene = new Mesh();
             _scene.LoadMesh("phoenix_ugv.md2");
+
+            _quad = new Mesh();
+            _quad.LoadMesh("quad.obj");
         }
 
         private Mesh _scene;
+        private Mesh _quad;
 
         #region GAMELOOP & RENDER
 
@@ -255,6 +264,34 @@ namespace OpenTKTest
         }
 
 
+        private void RenderPass()
+        {
+            
+        }
+
+        private void ShadowPass()
+        {
+
+
+          /*   virtual void ShadowMapPass()
+        {
+            m_shadowMapFBO.BindForWriting();
+
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            Pipeline p;
+            p.Scale(0.1f, 0.1f, 0.1f);
+            p.Rotate(0.0f, m_scale, 0.0f);
+            p.WorldPos(0.0f, 0.0f, 5.0f);
+            p.SetCamera(m_spotLight.Position, m_spotLight.Direction, Vector3f(0.0f, 1.0f, 0.0f));
+            p.SetPerspectiveProj(m_persProjInfo);
+            m_pShadowMapTech->SetWVP(p.GetWVPTrans());
+            m_pMesh->Render();
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }*/
+    }
+
         /// <summary>
         //  OnRenderFrame
         /// </summary>
@@ -283,6 +320,7 @@ namespace OpenTKTest
             SetLight();
 
             _scene.Render();
+            //_quad.Render();
 
             //Present();
             SwapBuffers();

@@ -1,4 +1,5 @@
 ﻿using System;
+using OpenTK.Graphics;
 
 namespace OpenTKTest
 {
@@ -7,7 +8,7 @@ namespace OpenTKTest
         [STAThread]
         public static void Main()
         {
-            using (var game = new MainWindow())
+            using (var game = new MainWindow(1024, 768, GraphicsMode.Default))
             {
                 game.Load += (sender, e) =>
                 {
