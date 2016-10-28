@@ -25,12 +25,14 @@ namespace OpenTKTest
 
           out vec2 TexCoord0;           
           out vec3 Normal0;
+          out vec3 WorldPos0;
 
             void main() 
             {
                 gl_Position = MVP * vec4(Position, 1.0);
                 TexCoord0 = TexCoord;
                 Normal0 = (M * vec4(Normal, 0.0)).xyz;
+                WorldPos0 = (M * vec4(Position, 1.0)).xyz;
              }
 
         ";
@@ -42,7 +44,8 @@ namespace OpenTKTest
             #endif
             in vec2 TexCoord0;
             in vec3 Normal0;
-            
+            in vec3 WorldPos0;
+
             out vec4 FragColor;
 
             uniform sampler2D gSampler;
@@ -51,31 +54,63 @@ namespace OpenTKTest
             struct DirectionalLight
             {
    	             vec3 Color;
+                 vec3 Position;
                  float AmbientIntensity;
                  vec3 Direction;
                  float DiffuseIntensity;
+                 float Attenuation;
             };
 
             uniform DirectionalLight gDirectionalLight;
 
             void main()
             {
-                vec4 AmbientColor = vec4(gDirectionalLight.Color * gDirectionalLight.AmbientIntensity, 1.0f);
-                float DiffuseFactor = dot(normalize(Normal0), -gDirectionalLight.Direction);
+                vec3 lightResult = vec3(0);
+                    
+                    vec3 LightToPixel = normalize(WorldPos0 - gDirectionalLight.Position.xyz);
+                    float SpotFactor = dot(LightToPixel, gDirectionalLight.Direction);
 
-                 vec4 DiffuseColor;
+                    if (degrees(acos(SpotFactor)) < 15.0) {                        
+                        lightResult = vec3(1.0,1.0,1.0);
+                    }                 
 
-                if (DiffuseFactor > 0) {
-                    DiffuseColor = vec4(gDirectionalLight.Color * gDirectionalLight.DiffuseIntensity * DiffuseFactor, 1.0f);
-                }
-                else {
-                    DiffuseColor = vec4(0, 0, 0, 0);
-                }
+                
 
-                 FragColor = texture2D(gSampler, TexCoord0.xy) + (DiffuseColor*AmbientColor);
+                 FragColor = texture2D(gSampler, TexCoord0.xy) * vec4(lightResult,1.0);
             }";
 
-#endregion
+
+        private const string shadowMapVS = @"#version 330
+
+                layout (location = 0) in vec3 Position;
+                layout (location = 1) in vec2 TexCoord;
+                layout (location = 2) in vec3 Normal;
+
+                uniform mat4 MVP;
+
+                out vec2 TexCoordOut;
+
+                void main()
+                {
+                    gl_Position = MVP * vec4(Position, 1.0);
+                    TexCoordOut = TexCoord;
+                }";
+
+        private const string shadowMapFS = @"#version 330
+
+            in vec2 TexCoordOut;
+            uniform sampler2D gShadowMap;
+
+            out vec4 FragColor;
+
+            void main()
+            {
+                float Depth = texture(gShadowMap, TexCoordOut).x;
+                Depth = 1.0 - (1.0 - Depth) * 25.0;
+                FragColor = vec4(Depth);
+            }";
+
+        #endregion
 
         // BUFFERS
         private uint _vbo;
@@ -86,6 +121,8 @@ namespace OpenTKTest
         private int _xform; // Matrixposition in Shader
         private int _modelMatrixPosition; // Matrixposition in Shader
         private int _gSamplerPosition;
+
+        private int _shadowShaderProgramm;
 
         // Window
         public static int WindowWidth;
@@ -108,27 +145,32 @@ namespace OpenTKTest
         private int _directionalAmbientIntensity;
         private int _directionalDirection;
         private int _directionalIntensity;
+        private int _directionalAttenuation;
+        private int _directionalPosition;
 
         private struct Light
         {
 
             public Vector3 Color;
+            public Vector3 Position;
             public float AmbientIntensity;
             public Vector3 Direction;
             public float DiffuseIntensity;
+            public float Attenuation;
         }
 
         private Light _light = new Light
         {
             Color = Vector3.One,
-            AmbientIntensity = -0.9f,
+            AmbientIntensity = 1f,
             Direction = Vector3.UnitX,
-            DiffuseIntensity = 2f
+            DiffuseIntensity = 2f,
+            Position = new Vector3(0f,0f,10f)
         };
 
 
         // ShadowMap
-        private ShadowMapFBO _shadowMapFbo = new ShadowMapFBO();
+        private ShadowMapFBO _shadowMapFbo;
 
         /// <summary>
         /// Constructor
@@ -160,10 +202,11 @@ namespace OpenTKTest
             GL.CullFace(CullFaceMode.Back);
             GL.Enable(EnableCap.CullFace);
             GL.Enable(EnableCap.DepthTest);
-           
+
             // Create ShadowMap
             // TODO: FIX Exception!
-            //_shadowMapFbo.Init(WindowWidth, WindowHeight);
+            _shadowMapFbo = new ShadowMapFBO();
+            _shadowMapFbo.Init(Width, Height);
 
             // Create and link shader
             CreateAndLinkShaders();
@@ -186,6 +229,7 @@ namespace OpenTKTest
             _directionalAmbientIntensity = GetAndMapShaderValues("gDirectionalLight.AmbientIntensity");
             _directionalDirection = GetAndMapShaderValues("gDirectionalLight.Direction");
             _directionalIntensity = GetAndMapShaderValues("gDirectionalLight.DiffuseIntensity");
+            _directionalPosition = GetAndMapShaderValues("gDirectionalLight.Position");
 
             _scene = new Mesh();
             _scene.LoadMesh("phoenix_ugv.md2");
@@ -196,6 +240,7 @@ namespace OpenTKTest
 
         private Mesh _scene;
         private Mesh _quad;
+        
 
         #region GAMELOOP & RENDER
 
@@ -236,21 +281,19 @@ namespace OpenTKTest
             }
             if (Keyboard[Key.Up])
             {
-                _light.Direction += new Vector3(0f,0.1f,0f);
-                _light.Direction.Y.Clamp(0.0f, 1.0f);
+                _light.Position += new Vector3(0f,0.1f,0f);
             }
             if (Keyboard[Key.Down])
             {
-                _light.Direction -= new Vector3(0f, 0.1f, 0f);
-                _light.Direction.Y.Clamp(0.0f, 1.0f);
+                _light.Position -= new Vector3(0f, 0.1f, 0f);
             }
             if (Keyboard[Key.Left])
             {
-                _light.DiffuseIntensity -= 0.1f;
+                _light.Position += new Vector3(0f, 0.0f, 0.1f);
             }
             if (Keyboard[Key.Right])
             {
-                _light.DiffuseIntensity += 0.1f;
+                _light.Position -= new Vector3(0f, 0.0f, 0.1f);
             }
 
             if (Focused)
@@ -266,45 +309,28 @@ namespace OpenTKTest
 
         private void RenderPass()
         {
-            
-        }
-
-        private void ShadowPass()
-        {
-
-
-          /*   virtual void ShadowMapPass()
-        {
-            m_shadowMapFBO.BindForWriting();
-
-            glClear(GL_DEPTH_BUFFER_BIT);
-
-            Pipeline p;
-            p.Scale(0.1f, 0.1f, 0.1f);
-            p.Rotate(0.0f, m_scale, 0.0f);
-            p.WorldPos(0.0f, 0.0f, 5.0f);
-            p.SetCamera(m_spotLight.Position, m_spotLight.Direction, Vector3f(0.0f, 1.0f, 0.0f));
-            p.SetPerspectiveProj(m_persProjInfo);
-            m_pShadowMapTech->SetWVP(p.GetWVPTrans());
-            m_pMesh->Render();
-
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }*/
-    }
-
-        /// <summary>
-        //  OnRenderFrame
-        /// </summary>
-        internal void OnRenderFrame()
-        {
             // render graphics
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+           
+
+            // Use our program
+            GL.UseProgram(_shaderProgramm);
+
+            GL.Uniform1(_gSamplerPosition, 0);
+            _shadowMapFbo.BindForReading(TextureUnit.Texture0);
+           
+            //  m_pShadowMapTech->SetTextureUnit(0);
+            //   m_shadowMapFBO.BindForReading(GL_TEXTURE0);
+
+
+            // Bind normal framebuffer for diagnostics of light
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
 
             // Set MVP with CameraMovement
             // note: all calculations are the other way round due to row notation
             var aspectRatio = Width / (float)Height;
             ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
-            ModelMatrix4 = CalculateModelMatrix(0.05f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3.0f));
+            ModelMatrix4 = CalculateModelMatrix(5000f, new Vector3(0, 0, 0), new Vector3(0f, 0f, -3f));
             ViewMatrix4 = CalculateViewMatrix();
             var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
             // Set MVP Matrix
@@ -313,7 +339,7 @@ namespace OpenTKTest
             var modelMatrix4 = ModelMatrix4;
             GL.UniformMatrix4(_modelMatrixPosition, false, ref modelMatrix4);
             // Set texture
-            GL.Uniform1(_gSamplerPosition, 0);
+            //GL.Uniform1(_gSamplerPosition, 0);
 
 
             // Set Directional Lightning
@@ -322,7 +348,40 @@ namespace OpenTKTest
             _scene.Render();
             //_quad.Render();
 
-            //Present();
+        }
+
+        private void ShadowPass()
+        {
+            _shadowMapFbo.BindForWriting();
+
+            GL.Clear(ClearBufferMask.DepthBufferBit);
+            
+            // Use our program
+            GL.UseProgram(_shadowShaderProgramm);
+
+            // Set Directional Lightning
+            SetLight();
+
+
+            var aspectRatio = Width / (float)Height;
+            ProjectionMatrix4 = Matrix4.CreatePerspectiveFieldOfView(1.3f, aspectRatio, 1.0f, 40.0f);
+            ModelMatrix4 = CalculateModelMatrix(0, new Vector3(0, 0, 0), new Vector3(0f, 0f, 0f));
+            ViewMatrix4 = CalculateViewMatrix();
+            var worldMatrix = ModelMatrix4 * ViewMatrix4 * ProjectionMatrix4;
+            // Set MVP Matrix
+            GL.UniformMatrix4(_xform, false, ref worldMatrix);
+            _scene.Render();
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+        }
+
+        /// <summary>
+        //  OnRenderFrame
+        /// </summary>
+        internal void OnRenderFrame()
+        {
+            ShadowPass();
+            RenderPass();
             SwapBuffers();
         }
 
@@ -332,8 +391,10 @@ namespace OpenTKTest
             GL.Uniform1(_directionalAmbientIntensity, _light.AmbientIntensity);
             var direction = _light.Direction;
             direction.Normalize();
-            GL.Uniform3(_directionalDirection, direction);
+            GL.Uniform3(_directionalDirection, _camera.Orientation.Normalized());
             GL.Uniform1(_directionalIntensity, _light.DiffuseIntensity);
+            GL.Uniform1(_directionalAttenuation, _light.Attenuation);
+            GL.Uniform3(_directionalPosition, _camera.Position);
         }
        
         #endregion
@@ -503,11 +564,49 @@ namespace OpenTKTest
             // Validate again
             GL.ValidateProgram(_shaderProgramm);
 
-            // Use our program
-            GL.UseProgram(_shaderProgramm);
 
         }
-        
+
+        private void CreateAndLinkShadowShaders()
+        {
+            _shadowShaderProgramm = GL.CreateProgram();
+            var fragShader = GL.CreateShader(ShaderType.FragmentShader);
+            var vertShader = GL.CreateShader(ShaderType.VertexShader);
+            GL.ShaderSource(fragShader, shadowMapFS);
+            GL.ShaderSource(vertShader, shadowMapVS);
+
+            string info;
+            int statusCode;
+
+            // Compile fragShader & check for erros
+            GL.CompileShader(fragShader);
+            GL.GetShaderInfoLog(fragShader, out info);
+            GL.GetShader(fragShader, ShaderParameter.CompileStatus, out statusCode);
+            Console.WriteLine($"Compiled FragShader with StatusCode {statusCode} and info {info}");
+
+            // Compile vertShader & check for errors
+            GL.CompileShader(vertShader);
+            GL.GetShaderInfoLog(fragShader, out info);
+            GL.GetShader(fragShader, ShaderParameter.CompileStatus, out statusCode);
+            Console.WriteLine($"Compiled VertShader with StatusCode {statusCode} and info {info}");
+
+
+            // Attach both shaders to one program
+            GL.AttachShader(_shadowShaderProgramm, fragShader);
+            GL.AttachShader(_shadowShaderProgramm, vertShader);
+
+            // Link Program and print error if something went wrong
+            GL.LinkProgram(_shadowShaderProgramm);
+            Console.WriteLine($"ShaderProgrammInfo: {GL.GetProgramInfoLog(_shaderProgramm)}");
+            Console.WriteLine($"Error: {GL.GetError()}");
+
+            // Validate again
+            GL.ValidateProgram(_shadowShaderProgramm);
+
+          
+
+        }
+
         internal void OnResize()
         {
             var aspectRatio = Width / (float)Height;

@@ -23,16 +23,19 @@ namespace OpenTKTest
             // Create the depth buffer
             GL.GenTextures(1, out _shadowMap);
             GL.BindTexture(TextureTarget.Texture2D, _shadowMap);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.DepthComponent, windowWidth, windowHeight, 0, PixelFormat.DepthComponent, PixelType.Float, IntPtr.Zero);
+            // Set Image
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.DepthComponent, windowWidth, windowHeight, 0, PixelFormat.DepthComponent, PixelType.HalfFloat, IntPtr.Zero);
+            // Set texParameter
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (float)TextureMinFilter.Linear);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (float)TextureMagFilter.Linear);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (float) TextureParameterName.ClampToEdge);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (float)TextureParameterName.ClampToEdge);
-            
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (float)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (float)TextureWrapMode.ClampToEdge);
+
+           
             // Bind
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, _fbo);
             GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment, TextureTarget.Texture2D, _shadowMap, 0);
-          
+
             // Disable writes to the color buffer
             GL.DrawBuffer(DrawBufferMode.None);
             GL.ReadBuffer(ReadBufferMode.None);

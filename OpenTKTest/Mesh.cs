@@ -78,9 +78,11 @@ namespace OpenTKTest
 
             for (var i = 0; i < meshVertices.Count; i++)
             {
+                var texCord = new Vector2(0f,0f);
                 var vertex = new Vector3(meshVertices[i].X, meshVertices[i].Y, meshVertices[i].Z);
                 var normal = new Vector3(normals[i].X, normals[i].Y, normals[i].Z);
-                var texCord = new Vector2(texCords[0][i].X, texCords[0][i].Y);
+                if(texCords[0].Count > 1)
+                 texCord = new Vector2(texCords[0][i].X, texCords[0][i].Y);
 
                 var compiledVertex = new Vertex
                 {
@@ -137,8 +139,9 @@ namespace OpenTKTest
                 }
                 else
                 {
-                   _textures.Add(new Texture(TextureTarget.Texture2D, "white.png"));
-                   _textures[i].Load();
+                    // FBO -> No textures
+                    //  _textures.Add(new Texture(TextureTarget.Texture2D, "white.jpg"));
+                  // _textures[i].Load();
                   }
                 }
             }
@@ -161,8 +164,8 @@ namespace OpenTKTest
                 GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, sizeof(Vertex), (IntPtr) 20);
                 
                 GL.BindBuffer(BufferTarget.ElementArrayBuffer, indexBuffer);
-
-                _textures[_materialTextureIndex[i]].Bind(TextureUnit.Texture0);
+                if(_materialTextureIndex.Count > 1)
+                    _textures[_materialTextureIndex[i]].Bind(TextureUnit.Texture0);
                
 
                 GL.DrawElements(BeginMode.Triangles, indicesCount, DrawElementsType.UnsignedInt ,0);
